@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8000" : "");
+console.log("using backend as api_base_url", API_BASE_URL);
 
 const samplePrompts = [
   "Which products were sold in the month of May 2025?",
@@ -252,7 +253,16 @@ export default function App() {
         }),
       });
 
-      const payload = await response.json();
+      const rawBody = await response.text();
+      let payload;
+      try {
+        payload = JSON.parse(rawBody);
+      } catch {
+        throw new Error(
+          "The backend did not return JSON. Check that VITE_API_BASE_URL points to the deployed API, not a frontend or 404 page.",
+        );
+      }
+
       if (!response.ok) {
         throw new Error(payload.detail || "Failed to get agent response.");
       }
