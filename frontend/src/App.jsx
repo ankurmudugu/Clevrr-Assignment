@@ -353,6 +353,14 @@ export default function App() {
           <textarea
             value={message}
             onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                if (canSubmit) {
+                  sendMessage(message);
+                }
+              }
+            }}
             rows={3}
             placeholder="Ask about revenue by city, repeat customers, AOV trends, top sellers..."
           />

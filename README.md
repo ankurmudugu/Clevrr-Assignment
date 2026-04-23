@@ -122,11 +122,10 @@ Return only valid JSON with the agreed answer/insights/table/chart/metadata shap
 - Which products were sold in May 2025?
 - Show the top 5 products by sales in 2025.
 - Who are my repeat customers?
-- What did John Smith buy?
+- What did Russell Winfield buy?
 - Show revenue by city for 2025.
-- Show the AOV trend for last month.
 - What are the most recently sold products?
-- Which products should I promote based on sales from this year?
+- Which products should I promote based on sales?
 
 **Notes**
 

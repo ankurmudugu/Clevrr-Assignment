@@ -86,6 +86,11 @@ class OrdersTableInput(BaseModel):
     def unpack_nested_payload(cls, values: Any) -> Any:
         return _unpack_nested_date_payload(values)
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_bounded_int(value, default=100, minimum=1, maximum=250)
+
 
 class CustomerLookupInput(BaseModel):
     customer_name: str = Field(description="Customer full name to fuzzy-match against Shopify customer records")
@@ -119,6 +124,11 @@ class RevenueByCityInput(BaseModel):
     def unpack_nested_payload(cls, values: Any) -> Any:
         return _unpack_nested_date_payload(values)
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_bounded_int(value, default=20, minimum=1, maximum=100)
+
 
 class AovTrendInput(BaseModel):
     start_date: str | None = Field(default=None, description="Inclusive UTC start datetime in ISO 8601 format")
@@ -137,6 +147,11 @@ class AovTrendInput(BaseModel):
 
 class RecentItemsInput(BaseModel):
     limit: int = Field(default=5, ge=1, le=50, description="Maximum number of recent items to return")
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_bounded_int(value, default=5, minimum=1, maximum=50)
 
 
 class PeriodTextInput(BaseModel):
@@ -158,6 +173,11 @@ class ProductsSoldInput(BaseModel):
     def unpack_nested_payload(cls, values: Any) -> Any:
         return _unpack_nested_date_payload(values)
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_bounded_int(value, default=50, minimum=1, maximum=250)
+
 
 class TopProductsInput(BaseModel):
     start_date: str | None = Field(default=None, description="Inclusive UTC start datetime in ISO 8601 format")
@@ -173,6 +193,11 @@ class TopProductsInput(BaseModel):
     @classmethod
     def unpack_nested_payload(cls, values: Any) -> Any:
         return _unpack_nested_date_payload(values)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_bounded_int(value, default=10, minimum=1, maximum=50)
 
 
 def build_agent(settings: Settings, store_url: str | None = None) -> AgentExecutor:
@@ -786,6 +811,16 @@ def _coerce_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _normalize_bounded_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    if value in (None, "", "{}"):
+        return default
+    try:
+        normalized = int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, normalized))
 
 
 def _normalize_product_title(value: Any) -> str:
