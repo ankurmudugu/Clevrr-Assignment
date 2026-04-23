@@ -2,14 +2,18 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .agent import run_agent
-from .config import get_settings
+from .config import ROOT_DIR, get_settings
 from .models import ChatRequest, ChatResponse
 
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
+FRONTEND_DIST_DIR = ROOT_DIR / "frontend_dist"
+FRONTEND_ASSETS_DIR = FRONTEND_DIST_DIR / "assets"
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,6 +27,10 @@ app.add_middleware(
 @app.get("/health")
 def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
+
+
+if FRONTEND_ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=FRONTEND_ASSETS_DIR), name="frontend-assets")
 
 
 def _is_gemini_quota_error(exc: Exception) -> bool:
@@ -53,3 +61,18 @@ def chat(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return ChatResponse(session_id=request.session_id, response=payload)
+
+
+@app.get("/{full_path:path}")
+def frontend_app(full_path: str) -> FileResponse:
+    if not FRONTEND_DIST_DIR.exists():
+        raise HTTPException(status_code=404, detail="Frontend build not found.")
+
+    requested_path = (FRONTEND_DIST_DIR / full_path).resolve()
+    if full_path and requested_path.is_file() and FRONTEND_DIST_DIR in requested_path.parents:
+        return FileResponse(requested_path)
+
+    index_path = FRONTEND_DIST_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend entrypoint not found.")
+    return FileResponse(index_path)

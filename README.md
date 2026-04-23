@@ -42,6 +42,111 @@ npm run dev
 
 5. Enter a Shopify store URL in the UI if you want to override `SHOPIFY_SHOP_NAME`.
 
+**Cloud Run Deployment**
+
+This repo now supports a single-container deployment for Google Cloud Run. The Docker image:
+
+- builds the React frontend
+- copies the static build into the Python image
+- serves both the UI and API from one FastAPI process
+
+Build the image locally:
+
+```bash
+docker build -t shopify-agent .
+docker run --rm -p 8080:8080 \
+  -e SHOPIFY_SHOP_NAME=your-store.myshopify.com \
+  -e SHOPIFY_ACCESS_TOKEN=your_shopify_admin_token \
+  -e GEMINI_API_KEY=your_gemini_api_key \
+  shopify-agent
+```
+
+Deploy to Cloud Run with Google Cloud Build:
+
+```bash
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/shopify-agent
+
+gcloud run deploy shopify-agent \
+  --image gcr.io/YOUR_PROJECT_ID/shopify-agent \
+  --platform managed \
+  --region YOUR_REGION \
+  --allow-unauthenticated \
+  --set-env-vars APP_ENV=production,SHOPIFY_SHOP_NAME=your-store.myshopify.com,SHOPIFY_API_VERSION=2025-04,FRONTEND_ORIGIN=https://YOUR_CLOUD_RUN_URL \
+  --set-secrets SHOPIFY_ACCESS_TOKEN=SHOPIFY_ACCESS_TOKEN:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest
+```
+
+Required runtime configuration:
+
+- `SHOPIFY_SHOP_NAME`
+- `SHOPIFY_ACCESS_TOKEN`
+- `GEMINI_API_KEY`
+- `SHOPIFY_API_VERSION` if you do not want the default
+- `FRONTEND_ORIGIN` for browser CORS behavior
+
+Cloud Run provides `PORT` automatically, and the container is configured to bind to it.
+
+**Backend-Only Cloud Run Deployment**
+
+If you want to deploy only the FastAPI backend to Cloud Run and host the frontend elsewhere, use the dedicated backend container in `backend/Dockerfile`.
+
+1. Enable the required Google Cloud services:
+
+```bash
+gcloud config set project YOUR_PROJECT_ID
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com
+```
+
+2. Store secrets in Secret Manager:
+
+```bash
+printf 'YOUR_ROTATED_SHOPIFY_TOKEN' | gcloud secrets create SHOPIFY_ACCESS_TOKEN --data-file=-
+printf 'YOUR_GEMINI_API_KEY' | gcloud secrets create GEMINI_API_KEY --data-file=-
+```
+
+If the secrets already exist, add a new version instead:
+
+```bash
+printf 'YOUR_ROTATED_SHOPIFY_TOKEN' | gcloud secrets versions add SHOPIFY_ACCESS_TOKEN --data-file=-
+printf 'YOUR_GEMINI_API_KEY' | gcloud secrets versions add GEMINI_API_KEY --data-file=-
+```
+
+3. Build and push the backend image from the `backend/` directory:
+
+```bash
+cd backend
+gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/shopify-agent-backend
+```
+
+4. Deploy to Cloud Run:
+
+```bash
+gcloud run deploy shopify-agent-backend \
+  --image gcr.io/YOUR_PROJECT_ID/shopify-agent-backend \
+  --platform managed \
+  --region YOUR_REGION \
+  --allow-unauthenticated \
+  --set-env-vars APP_ENV=production,APP_HOST=0.0.0.0,SHOPIFY_SHOP_NAME=your-store.myshopify.com,SHOPIFY_API_VERSION=2025-04,FRONTEND_ORIGIN=https://your-frontend-domain.com \
+  --set-secrets SHOPIFY_ACCESS_TOKEN=SHOPIFY_ACCESS_TOKEN:latest,GEMINI_API_KEY=GEMINI_API_KEY:latest
+```
+
+5. Verify the backend:
+
+```bash
+curl https://YOUR_CLOUD_RUN_URL/health
+```
+
+Expected response:
+
+```json
+{"status":"ok"}
+```
+
+6. Point your frontend deployment at the Cloud Run URL by setting:
+
+```env
+VITE_API_BASE_URL=https://YOUR_CLOUD_RUN_URL
+```
+
 **Architecture**
 
 - `frontend/src/App.jsx`: React chat interface. Sends user messages to the backend and renders the assistant response as prose, a table, and/or a chart.
