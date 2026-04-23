@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "https://shopify-agent-backend-1020409473785.us-central1.run.app" : "");
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "https://shopify-agent-backend-1020409473785.us-central1.run.app" : "https://shopify-agent-backend-1020409473785.us-central1.run.app");
 console.log("using backend as api_base_url", API_BASE_URL);
 
 const samplePrompts = [
