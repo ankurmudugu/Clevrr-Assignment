@@ -328,8 +328,6 @@ def build_agent(settings: Settings, store_url: str | None = None) -> AgentExecut
         limit: int = 10,
     ) -> dict[str, Any]:
         limit = _coerce_int(limit, default=10)
-        current_products = client.list_products()
-        current_product_ids, current_product_titles = _build_current_catalog_indexes(current_products)
         orders = client.list_orders_in_range(
             start=_parse_iso_datetime(start_date or _default_start_date()),
             end=_parse_iso_datetime(end_date or _default_end_date()),
@@ -345,13 +343,6 @@ def build_agent(settings: Settings, store_url: str | None = None) -> AgentExecut
             for line_item in order.get("line_items", []) or []:
                 product_title = str(line_item.get("title") or "Unknown Product").strip() or "Unknown Product"
                 product_id = line_item.get("product_id")
-                if not _is_current_catalog_product(
-                    product_id=product_id,
-                    product_title=product_title,
-                    current_product_ids=current_product_ids,
-                    current_product_titles=current_product_titles,
-                ):
-                    continue
                 quantity = int(line_item.get("quantity", 0) or 0)
                 unit_price = _safe_float(line_item.get("price"))
                 totals = product_totals[product_title]
@@ -387,6 +378,39 @@ def build_agent(settings: Settings, store_url: str | None = None) -> AgentExecut
             "top_products": rows,
             "start_date": start_date or _default_start_date(),
             "end_date": end_date or _default_end_date(),
+            "catalog_filter_applied": False,
+        }
+
+    def get_promotable_products_by_sales(
+        start_date: str | None = None,
+        end_date: str | None = None,
+        limit: int = 10,
+    ) -> dict[str, Any]:
+        limit = _coerce_int(limit, default=10)
+        top_products_result = get_top_products_by_sales(
+            start_date=start_date,
+            end_date=end_date,
+            limit=max(limit * 5, 25),
+        )
+        current_products = client.list_products()
+        current_product_ids, current_product_titles = _build_current_catalog_indexes(current_products)
+
+        promotable_rows = [
+            row
+            for row in top_products_result.get("top_products", [])
+            if _is_current_catalog_product(
+                product_id=row.get("product_id"),
+                product_title=str(row.get("product_title") or ""),
+                current_product_ids=current_product_ids,
+                current_product_titles=current_product_titles,
+            )
+        ][:limit]
+
+        return {
+            "top_products": promotable_rows,
+            "start_date": top_products_result.get("start_date", start_date or _default_start_date()),
+            "end_date": top_products_result.get("end_date", end_date or _default_end_date()),
+            "catalog_filter_applied": True,
             "catalog_products_considered": len(current_product_titles),
         }
 
@@ -601,6 +625,12 @@ def build_agent(settings: Settings, store_url: str | None = None) -> AgentExecut
             args_schema=TopProductsInput,
         ),
         StructuredTool.from_function(
+            func=get_promotable_products_by_sales,
+            name="get_promotable_products_by_sales",
+            description="Return a ranked product sales summary across a date range, filtered to products that still exist in the current Shopify catalog. Use this for future-looking questions like what products to promote, feature, restock, or recommend.",
+            args_schema=TopProductsInput,
+        ),
+        StructuredTool.from_function(
             func=get_customer_order_count,
             name="get_customer_order_count",
             description="Find a customer by name and return their order count from Shopify customer records.",
@@ -678,8 +708,9 @@ def build_agent(settings: Settings, store_url: str | None = None) -> AgentExecut
                     "Use resolve_time_period only for relative or ambiguous periods such as 'last month', 'this year', 'recently', or when you need deterministic clarification. "
                     "If the user asks a recommendation question like what products to promote based on sales, treat that as an analytical request for the strongest-selling products unless they specify a different business goal. "
                     "When the user replies with only a time period such as 'all time' or 'last month', use chat history to continue the pending analysis instead of asking them to restate the full question. "
-                    "For best-selling product analysis, prefer get_top_products_by_sales over raw line-item dumps. "
-                    "For promotion or recommendation questions, only recommend products that still exist in the current Shopify catalog. "
+                    "For best-selling product analysis, prefer get_top_products_by_sales over raw line-item dumps and treat historical sold line items as valid even if a product is no longer in the current catalog. "
+                    "For promotion or recommendation questions about future actions, prefer get_promotable_products_by_sales so recommendations come only from the live Shopify catalog. "
+                    "For purely historical questions, use historical sold line items even if a product no longer exists in the current catalog. "
                     "For customer follow-up questions like 'what did he buy', use current-turn customer tools and prior chat only to resolve the referenced customer name, then fetch Shopify data again before answering. "
                     "Prefer the specialized analytics tools over raw get_shopify_data whenever one fits the question. "
                     "For analytical questions, break the problem into steps, possibly calling multiple tools before answering. "
