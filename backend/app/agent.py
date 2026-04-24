@@ -711,6 +711,11 @@ def build_agent(settings: Settings, store_url: str | None = None) -> AgentExecut
                     "For best-selling product analysis, prefer get_top_products_by_sales over raw line-item dumps and treat historical sold line items as valid even if a product is no longer in the current catalog. "
                     "For promotion or recommendation questions about future actions, prefer get_promotable_products_by_sales so recommendations come only from the live Shopify catalog. "
                     "For purely historical questions, use historical sold line items even if a product no longer exists in the current catalog. "
+                    "For questions about seasonal suitability or semantic product groupings in the current catalog, such as 'winter products', 'summer products', 'giftable items', 'travel products', or 'office products', first call list_products and then infer the answer from the product titles. "
+                    "Do not refuse these requests just because Shopify lacks an explicit seasonal or category field. Use the product titles as evidence, select the most plausible matches, and explain briefly why each one fits. "
+                    "For these semantic catalog-matching answers, always put the matched products in the JSON 'table' field instead of a bullet list in 'answer'. "
+                    "Use a concise summary sentence in 'answer', and put the detailed results in a table with columns like Product Title, Why It Fits, and optionally Confidence. "
+                    "Present those conclusions as likely matches inferred from the live catalog titles, not as guaranteed Shopify metadata. "
                     "For customer follow-up questions like 'what did he buy', use current-turn customer tools and prior chat only to resolve the referenced customer name, then fetch Shopify data again before answering. "
                     "Prefer the specialized analytics tools over raw get_shopify_data whenever one fits the question. "
                     "For analytical questions, break the problem into steps, possibly calling multiple tools before answering. "
@@ -726,6 +731,10 @@ def build_agent(settings: Settings, store_url: str | None = None) -> AgentExecut
                     "Assistant internal plan: resolve_time_period('last month') -> list_orders_in_range(start_date, end_date, fields including line_items) -> PythonAstREPLTool to aggregate and rank products -> final JSON answer.\n"
                     "User: How much revenue was generated in summer of 2025?\n"
                     "Assistant internal plan: infer start_date=2025-06-01T00:00:00Z and end_date=2025-08-31T23:59:59Z -> call the relevant Shopify analytics tool(s) with those explicit dates -> final JSON answer.\n"
+                    "User: What are some winter products in my catalog?\n"
+                    "Assistant internal plan: call list_products() -> infer likely winter-suitable products from product titles in the live catalog -> put the matches and short reasoning in the JSON table field -> final JSON answer.\n"
+                    "User: Which items in my catalog seem good for travel?\n"
+                    "Assistant internal plan: call list_products() -> infer likely travel-friendly products from product titles in the live catalog -> put the matches and short title-based reasoning in the JSON table field -> final JSON answer.\n"
                     "Follow that style for similar analytical questions."
                 ),
             ),
